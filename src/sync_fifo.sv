@@ -3,10 +3,13 @@
 // Parametrizable width and depth
 // =============================================================
 
+`timescale 1ns/1ps
+
+
 module sync_fifo #(
-    parameter int WIDTH = 8,
-    parameter int DEPTH = 16,
-    localparam int ADDR_BITS = $clog2(DEPTH)
+    parameter  WIDTH = 8,
+    parameter  DEPTH = 16,
+    localparam  ADDR_BITS = $clog2(DEPTH)
 )(
     input  logic                 clk,
     input  logic                 rst,

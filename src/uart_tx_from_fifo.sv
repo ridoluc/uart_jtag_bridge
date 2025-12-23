@@ -3,6 +3,8 @@
 // Drains a reply FIFO and feeds uart_tx using ready/valid
 // =============================================================
 
+`timescale 1ns/1ps
+
 module uart_tx_from_fifo (
     input  logic       clk,
     input  logic       rst,
@@ -18,15 +20,8 @@ module uart_tx_from_fifo (
     input  logic       tx_ready
 );
 
-    // ---------------------------------------------------------
-    // Default outputs
-    // ---------------------------------------------------------
-    always_comb begin
-        fifo_rd_en = 1'b0;
-        tx_valid   = 1'b0;
-        tx_data    = fifo_rd_data;
-    end
 
+    assign tx_data = fifo_rd_data;
     // ---------------------------------------------------------
     // Control logic
     // ---------------------------------------------------------

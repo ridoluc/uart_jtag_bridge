@@ -3,9 +3,11 @@
 // UART transmitter: 8 data bits, 1 start bit, 1 stop bit
 // =============================================================
 
+`timescale 1ns/1ps
+
 module uart_tx #(
-    parameter int CLK_FREQ  = 10_000_000,
-    parameter int BAUD_RATE = 115200
+    parameter CLK_FREQ  = 10_000_000,
+    parameter BAUD_RATE = 115200
 )(
     input  logic       clk,
     input  logic       rst,
@@ -22,9 +24,13 @@ module uart_tx #(
     // ---------------------------------------------------------
     // Baud timing
     // ---------------------------------------------------------
-    localparam int BAUD_DIV = CLK_FREQ / BAUD_RATE;
+    localparam BAUD_DIV = CLK_FREQ / BAUD_RATE;
 
-    logic [$clog2(BAUD_DIV)-1:0] baud_cnt;
+    // Make baud counter wide enough to safely compare against
+    // the unsized parameter expression `BAUD_DIV - 1` (Verilator
+    // may treat that as a 32-bit integer). Using a 32-bit counter
+    // avoids width-mismatch complaints from the simulator.
+    logic [31:0] baud_cnt;
     logic baud_tick;
 
     // ---------------------------------------------------------
@@ -95,7 +101,7 @@ module uart_tx #(
 
             // ---------------------------------------------
             TX_DATA: begin
-                tx <= shift_reg[bit_index];
+                tx <= shift_reg[bit_index[2:0]];
                 if (baud_tick) begin
                     bit_index <= bit_index + 1;
                     if (bit_index == 7)

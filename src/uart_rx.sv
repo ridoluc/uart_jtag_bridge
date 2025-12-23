@@ -1,6 +1,9 @@
+
+`timescale 1ns/1ps
+
 module uart_rx #(
-    parameter int CLK_FREQ  = 10_000_000,
-    parameter int BAUD_RATE = 115200
+    parameter CLK_FREQ  = 10_000_000,
+    parameter BAUD_RATE = 115200
 )(
     input  logic clk,
     input  logic rst,
@@ -15,10 +18,10 @@ module uart_rx #(
     // ------------------------------------------------------------
     // Baud timing
     // ------------------------------------------------------------
-    localparam int BAUD_DIV  = CLK_FREQ / BAUD_RATE;     // ~87 for 10MHz/115200
-    localparam int HALF_BAUD = BAUD_DIV / 2;
+    localparam BAUD_DIV  = CLK_FREQ / BAUD_RATE;     // ~87 for 10MHz/115200
+    localparam HALF_BAUD = BAUD_DIV / 2;
 
-    logic [$clog2(BAUD_DIV)-1:0] baud_cnt;
+    logic [31:0] baud_cnt;
 
     // ------------------------------------------------------------
     // State machine
@@ -37,7 +40,7 @@ module uart_rx #(
     // ------------------------------------------------------------
     // UART Receive Logic
     // ------------------------------------------------------------
-    always_ff @(posedge clk or posedge rst) begin
+    always_ff @(posedge clk) begin
         if (rst) begin
             state     <= IDLE;
             rx_valid  <= 1'b0;
@@ -88,7 +91,7 @@ module uart_rx #(
                 // ------------------------------------------------
                 DATA: begin
                     if (baud_cnt == 0) begin
-                        shift_reg[bit_index] <= rx;
+                        shift_reg[bit_index[2:0]] <= rx;
 
                         if (bit_index == 7) begin
                             state <= STOP;
