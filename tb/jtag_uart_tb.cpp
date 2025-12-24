@@ -236,7 +236,7 @@ int main(int argc, char** argv) {
     std::cout << "Writing data to memory..." << std::endl;
     write_mem(top, 0x10, 0xDEADBEEF);
     write_mem(top, 0x14, 0xCAFEBABE);
-    // Read back the data
+    // // Read back the data
     std::cout << "Reading data from memory..." << std::endl;
     read_mem(top, 0x10);
     read_mem(top, 0x14);    
@@ -250,3 +250,4 @@ int main(int argc, char** argv) {
     delete top;
     return 0;
 }
+

@@ -71,7 +71,7 @@ module Top #(
    // Instantiate the JTAG controller
    JTAG #(
       .MEM_ADDR_WIDTH(MEM_ADDR_WIDTH),
-      .MEM_DATA_WIDTH(32)
+      .MEM_DATA_WIDTH(MEM_DATA_WIDTH)
    ) jtag (
       .tck(tck),
       .tms(tms),
@@ -92,7 +92,7 @@ module Top #(
    // Instantiate the Programming controller
    Programming_controller #(
       .MEM_ADDR_WIDTH(MEM_ADDR_WIDTH),
-      .MEM_DATA_WIDTH(32)
+      .MEM_DATA_WIDTH(MEM_DATA_WIDTH)
    )prog_ctrl(
       .clk(clk),
       .rst_n(rst_n),
