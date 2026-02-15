@@ -41,7 +41,7 @@ module Top #(
    logic tdo;
 
 
-   reg [31:0] memory[0:(1<<MEM_ADDR_WIDTH)-1]; 
+   reg [31:0] memory[0:(1<<MEM_ADDR_WIDTH)-1] /* verilator public */; 
 
    // initial begin
    //     $readmemb("memory_load.bin", memory);
@@ -115,9 +115,12 @@ module Top #(
 
 
 
-   assign out_data = mem_control_enable ? 32'b0: mem_out;
+   assign out_data = mem_control_enable ? mem_out : 32'b0;
 
    assign address = mem_control_enable ?  mem_addr : in_address;
 
+   logic [31:0] debug_signal1,debug_signal2;
+   assign debug_signal1 = memory[16];
+   assign debug_signal2 = memory[20];
 
 endmodule

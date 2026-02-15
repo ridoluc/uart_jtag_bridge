@@ -28,7 +28,7 @@ VERILATOR = verilator
 CXXFLAGS = -Wall -O2
 
 # Verilator options
-VOPTIONS = --public-flat-rw --public --trace 
+VOPTIONS = --public-flat-rw --public --trace --trace-structs --trace-max-array 20
 
 # Directory for Verilator output files
 OBJ_DIR = obj_dir

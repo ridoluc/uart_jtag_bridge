@@ -150,10 +150,11 @@ void JTAGDriver::build_write_mem(uint32_t ir,
     append_repeat(0, 0, 1); // Capture-DR
     append_repeat(0, 0, 1); // Shift-DR
 
-    // Shift DR address
-    shift_value(dr_addr, dr_addr_len, false);
+
     // Shift DR data
     shift_value(dr_data, dr_data_len, false);
+    // Shift DR address
+    shift_value(dr_addr, dr_addr_len, false);
     // Return to Run-Test/Idle
     append_repeat(1, 0, 1); // Exit DR
     append_repeat(1, 0, 1); // Update-DR

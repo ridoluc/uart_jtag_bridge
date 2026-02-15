@@ -61,12 +61,13 @@ bool uart_rx(VTop* top, char* _data) {
     bool prev_uart_tx = top->uart_tx;
 
     // Wait for the UART TX start signal (falling edge detection)
-    while ((prev_uart_tx == top->uart_tx || top->uart_tx == 1) && main_time - start_time < 1000) {
+    while ((prev_uart_tx == top->uart_tx || top->uart_tx == 1) && main_time - start_time < 5000) {
         prev_uart_tx = top->uart_tx;
         clk_tick(top); // Continue clocking until data is received
     }
     if (main_time - start_time >= 5000) {
-        std::cerr << "UART RX Error: No start signal detected within timeout." << std::endl;
+        std::cerr << "\nUART RX Error: No start signal detected within timeout." << std::endl;
+        std::cerr << "Current time: " << main_time << ", UART TX: " << (int)top->uart_tx << std::endl;
         return 0; // Error condition
     }
 
@@ -75,7 +76,7 @@ bool uart_rx(VTop* top, char* _data) {
         clk_tick(top);
 
         if(count == UART_BAUD_COUNT / 2 && top->uart_tx != 0) {
-            std::cerr << "UART RX Error: Start bit not detected." << std::endl;
+            std::cerr << "\nUART RX Error: Start bit not detected." << std::endl;
             return 0; // Error condition
         }
     }
