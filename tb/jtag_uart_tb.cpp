@@ -93,6 +93,7 @@ bool uart_rx(VTop* top, char* _data) {
 
     *_data = data;
 
+    std::cout<<std::endl<< std::dec<<"Te: "<<main_time<<std::endl;
     return 1;
 }
 
@@ -125,7 +126,7 @@ void uart_tx(VTop* top, char data) {
 
     }
 
-    std::cout << "Sent byte: 0b" << std::bitset<8>(data) << std::endl;
+    // std::cout << "Sent byte: 0b" << std::bitset<8>(data) << std::endl;
 
 }
 
@@ -180,15 +181,30 @@ void read_mem(VTop* top, uint32_t addr) {
 
 	jtag_driver.clear_stream();
 
+    jtag_driver.shift_out_data(32);
+    jtag_stream = jtag_driver.get_stream(); 
+
     char data_byte;
+    
+    uart_tx(top, jtag_stream[0]);
+    uart_tx(top, jtag_stream[1]);
+
     std::cout << "Read Data: 0x";
+    
     for (int i = 0; i < 4; i++) {
+        std::cout<<std::endl<< std::dec<<"Ts: "<<main_time<<std::endl;
+
+        uart_tx(top, 0); // Send the JTAG stream to the DUT
+        uart_tx(top, 0); // Send the JTAG stream to the DUT
+    
         if (!uart_rx(top, &data_byte)) {
             std::cerr << "UART RX Error during memory read." << std::endl;
             return;
         }
         std::cout << std::hex << std::setw(2) << std::setfill('0') << (static_cast<uint32_t>(data_byte) & 0xFF);
     }
+
+
     std::cout << std::dec << std::endl;
 }
 
@@ -251,4 +267,5 @@ int main(int argc, char** argv) {
     delete top;
     return 0;
 }
+
 

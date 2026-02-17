@@ -31,7 +31,6 @@ module jtag_engine (
 
     logic [3:0] tdo_nibble;
     logic       nibble_half;   // 0 = lower, 1 = upper
-    logic [7:0] tdo_byte;
 
     // ---------------------------------------------------------
     // FSM
@@ -60,7 +59,6 @@ module jtag_engine (
 
             bit_idx      <= 2'd0;
             tdo_nibble   <= 4'd0;
-            tdo_byte     <= 8'd0;
             nibble_half  <= 1'b0;
         end else begin
             rx_rd_en <= 1'b0;
@@ -108,11 +106,10 @@ module jtag_engine (
                 COMMIT: begin
                     if (!tx_full) begin
                         if (!nibble_half) begin
-                            tdo_byte[3:0] <= tdo_nibble;
+                            tx_wr_data[3:0] <= tdo_nibble;
                             nibble_half   <= 1'b1;
                         end else begin
-                            tdo_byte[7:4] <= tdo_nibble;
-                            tx_wr_data    <= tdo_byte;
+                            tx_wr_data[7:4] <= tdo_nibble;
                             tx_wr_en      <= 1'b1;
                             nibble_half   <= 1'b0;
                         end
