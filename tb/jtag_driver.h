@@ -46,6 +46,7 @@ public:
                         int dr_addr_len);
 
     void shift_out_data(int bitlen);
+    void shift_out_data_exit();
 };
 
 const std::vector<uint8_t> JTAGDriver::get_stream()
@@ -195,14 +196,22 @@ void JTAGDriver::shift_out_data(int bitlen)
     append_repeat(0, 0, 1); // Shift-DR
 
     // Shift out dummy values to read data
-    shift_value(0, bitlen, false); // Dummy read to get data out
-    // shift_value(0, dr_addr_len, true); // Dummy read to get data out
+    // shift_value(0, bitlen, false); // Dummy read to get data out
+    // // shift_value(0, dr_addr_len, true); // Dummy read to get data out
 
-    // Return to Run-Test/Idle
+    // // Return to Run-Test/Idle
+    // append_repeat(1, 0, 1); // Exit DR
+    // append_repeat(1, 0, 1); // Update-DR
+    // append_repeat(0, 0, 1); // Run-Test/Idle
+
+}
+
+// Return to Run-Test/Idle after reading data
+void JTAGDriver::shift_out_data_exit()
+{
     append_repeat(1, 0, 1); // Exit DR
     append_repeat(1, 0, 1); // Update-DR
-    append_repeat(0, 0, 1); // Run-Test/Idle
-
+    append_repeat(0, 0, 2); // Run-Test/Idle
 }
 
 #endif // JTAG_DRIVER_H

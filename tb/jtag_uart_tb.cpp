@@ -52,6 +52,8 @@ void clk_tick(VTop* top) {
 
 
 bool uart_rx(VTop* top, char* _data) {
+    std::cout<<std::endl<< std::dec<<"Te: "<<main_time<<std::endl;
+
     char data = 0;
     int count = 0;
 
@@ -61,15 +63,16 @@ bool uart_rx(VTop* top, char* _data) {
     bool prev_uart_tx = top->uart_tx;
 
     // Wait for the UART TX start signal (falling edge detection)
-    while ((prev_uart_tx == top->uart_tx || top->uart_tx == 1) && main_time - start_time < 5000) {
+    while ((prev_uart_tx == top->uart_tx || top->uart_tx == 1) && main_time - start_time < 1000) {
         prev_uart_tx = top->uart_tx;
         clk_tick(top); // Continue clocking until data is received
     }
-    if (main_time - start_time >= 5000) {
+    if (main_time - start_time >= 1000) {
         std::cerr << "\nUART RX Error: No start signal detected within timeout." << std::endl;
         std::cerr << "Current time: " << main_time << ", UART TX: " << (int)top->uart_tx << std::endl;
         return 0; // Error condition
     }
+    std::cout << "Start bit detected at time: " << main_time << std::endl;
 
     // Read start bit
     while(count++ < UART_BAUD_COUNT) {
@@ -93,7 +96,6 @@ bool uart_rx(VTop* top, char* _data) {
 
     *_data = data;
 
-    std::cout<<std::endl<< std::dec<<"Te: "<<main_time<<std::endl;
     return 1;
 }
 
@@ -127,7 +129,65 @@ void uart_tx(VTop* top, char data) {
     }
 
     // std::cout << "Sent byte: 0b" << std::bitset<8>(data) << std::endl;
+    // for(int i =0; i<1000; i++) clk_tick(top); // small gap after transmission
+}
 
+// Transfer a byte with value 0 while checking for the RX start bit
+void uart_read_byte(VTop* top, char* data) {
+    bool prev_uart_tx = top->uart_tx;
+
+    top->uart_rx = 1; // Ensure UART RX is high before starting transmission
+    clk_tick(top);
+    clk_tick(top);
+
+    // Send first zero byte 
+    int rx_baud_count = UART_BAUD_COUNT*10; // Start bit + 8 data bits + stop bit
+    top->uart_rx = 0; // Start bit
+    while(rx_baud_count-- > 0) {
+        clk_tick(top);
+        if(rx_baud_count < UART_BAUD_COUNT) top->uart_rx = 1; // Stop bit
+    }
+
+    // std::cout << "Time after sending first zero byte: " << main_time << std::endl;
+    //Send second zero byte to ensure we are in the middle of the stop bit of the first byte
+    rx_baud_count = UART_BAUD_COUNT*10;
+    top->uart_rx = 0; // Start bit
+    while(rx_baud_count-- > 0) {
+        clk_tick(top);
+        if(rx_baud_count < UART_BAUD_COUNT){ 
+            top->uart_rx = 1; // Stop bit
+            if(prev_uart_tx == 1 && top->uart_tx == 0) {
+                // std::cout << "Start bit detected at time: " << main_time << std::endl;
+                break; // Start bit detected
+            }
+            prev_uart_tx = top->uart_tx;
+        }
+    }   
+
+    // std::cout << "Time after sending second zero byte: " << main_time << std::endl;
+    int tx_baud_count = UART_BAUD_COUNT;
+    // Read start bit
+    while(tx_baud_count-- > 0) {
+        clk_tick(top);
+    }
+    // Read data bits
+    char data_byte = 0;
+    for(int i = 0; i < 8; i++) {
+        tx_baud_count = UART_BAUD_COUNT;
+        while(tx_baud_count-- > 0) {
+            clk_tick(top);
+            if(tx_baud_count == UART_BAUD_COUNT / 2) {
+                data_byte |= (top->uart_tx << i);
+            }
+        }
+    }
+    *data = data_byte;
+
+    // Wait for stop bit
+    tx_baud_count = UART_BAUD_COUNT;
+    while(tx_baud_count-- > 0) {
+        clk_tick(top);
+    }
 }
 
 void prog_mode_on(VTop* top) {
@@ -169,7 +229,7 @@ void write_mem(VTop* top, uint32_t addr, uint32_t data) {
 	jtag_driver.clear_stream();
 }
 
-void read_mem(VTop* top, uint32_t addr) {
+void read_mem(VTop* top, uint32_t addr, std::vector<char>* received_bytes_ptr = nullptr) {
 	std::vector<uint8_t> jtag_stream;
 
 	jtag_driver.build_read_mem(IR_READ, 4, addr, ADDR_W); 
@@ -181,7 +241,8 @@ void read_mem(VTop* top, uint32_t addr) {
 
 	jtag_driver.clear_stream();
 
-    jtag_driver.shift_out_data(32);
+    jtag_driver.shift_out_data(DR_W);
+    jtag_driver.shift_out_data_exit();
     jtag_stream = jtag_driver.get_stream(); 
 
     char data_byte;
@@ -189,23 +250,36 @@ void read_mem(VTop* top, uint32_t addr) {
     uart_tx(top, jtag_stream[0]);
     uart_tx(top, jtag_stream[1]);
 
-    std::cout << "Read Data: 0x";
-    
-    for (int i = 0; i < 4; i++) {
-        std::cout<<std::endl<< std::dec<<"Ts: "<<main_time<<std::endl;
+    std::vector<char> received_bytes;
+    for (size_t i = 0; i < 6; i++)
+    {
+        uart_read_byte(top, &data_byte);
+        received_bytes.push_back(data_byte);
+    }
 
-        uart_tx(top, 0); // Send the JTAG stream to the DUT
-        uart_tx(top, 0); // Send the JTAG stream to the DUT
-    
-        if (!uart_rx(top, &data_byte)) {
-            std::cerr << "UART RX Error during memory read." << std::endl;
-            return;
-        }
-        std::cout << std::hex << std::setw(2) << std::setfill('0') << (static_cast<uint32_t>(data_byte) & 0xFF);
+    if (received_bytes_ptr != nullptr) {
+        *received_bytes_ptr = received_bytes;
     }
 
 
-    std::cout << std::dec << std::endl;
+
+    uart_tx(top, jtag_stream[2]);
+	jtag_driver.clear_stream();
+
+}
+
+void print_received_data(const std::vector<char>& received_bytes) {
+    int data_address = ((uint8_t)received_bytes[received_bytes.size()-1] << 8); 
+    data_address |= (uint8_t)received_bytes[received_bytes.size()-2];
+
+    uint32_t data_value = 0;
+    for (int i = 3; i >= 0; i--)    {
+        data_value <<= 8;
+        data_value |= (uint8_t)received_bytes[i];
+    }
+
+    std::cout<< "ADDR: 0x" << data_address << "\tDATA: 0x" << std::hex << data_value << std::dec << std::endl;
+
 }
 
 void reset_jtag(VTop* top) {
@@ -255,8 +329,42 @@ int main(int argc, char** argv) {
     write_mem(top, 0x14, 0xCAFEBABE);
     // // Read back the data
     std::cout << "Reading data from memory..." << std::endl;
-    read_mem(top, 0x10);
-    read_mem(top, 0x14);    
+    std::vector<char> received_bytes;
+    read_mem(top, 0x10, &received_bytes);
+    print_received_data(received_bytes);
+    read_mem(top, 0x14, &received_bytes);
+    print_received_data(received_bytes);    
+
+
+    // generate random data for the first 100 addresses and read them back checking for correctness
+    std::cout << "Testing random data writes and reads..." << std::endl;
+    std::vector<int> test_data;
+    for (uint32_t addr = 0; addr < 100; addr++) {
+        uint32_t data = rand(); // Generate random data
+        test_data.push_back(data);
+        write_mem(top, addr, data); // Write to memory
+    }
+
+    int errors = 0;
+    for (uint32_t addr = 0; addr < 30; addr++) {
+        std::cout << "Reading from address: 0x" << std::hex << addr << std::dec << std::endl;
+        std::vector<char> received_bytes;
+        read_mem(top, addr, &received_bytes); // Read from memory
+
+        uint32_t expected_data = test_data[addr];
+        uint32_t received_data = 0;
+        for (int i = 3; i >= 0; i--)    {
+            received_data <<= 8;
+            received_data |= (uint8_t)received_bytes[i];
+        }
+
+        if (received_data != expected_data) {
+            std::cout << "Error: Expected 0x" << std::hex << expected_data << ", got 0x" << received_data << std::dec << std::endl;
+            errors++;
+        }
+    }
+
+    std::cout << "Test completed with " << errors << " errors." << std::endl;
 
     // Exit programming mode
     std::cout << "Exiting programming mode..." << std::endl;
