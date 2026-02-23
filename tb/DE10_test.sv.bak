@@ -1,0 +1,173 @@
+`timescale 1ns / 1ps
+
+
+module DE10Top #(
+    parameter MEM_ADDR_WIDTH = 10, // number of words addressable
+    parameter MEM_DATA_WIDTH = 32 // 32 bits per word
+)
+
+(
+    input logic pll_clk,
+    input logic rst_n,
+
+    input logic uart_rx,
+    output logic uart_tx,
+
+    output logic [5:0] seg_out1,
+    output logic [5:0] seg_out2,
+    output logic [5:0] seg_out3,
+    output logic [5:0] seg_out4,
+    output logic [5:0] seg_out5,
+    output logic [5:0] seg_out6,
+
+);
+
+    localparam MEM_SIZE = 100;
+
+    logic [MEM_ADDR_WIDTH-1:0] jtag_addr;
+    logic [31:0] jtag_wdata;
+    logic [31:0] jtag_rdata;
+    logic        jtag_we;
+    logic        jtag_req_pulse;
+    logic        jtag_en;
+    logic        jtag_ack; 
+    
+    reg  [31:0] mem_out;
+    logic [MEM_ADDR_WIDTH-1:0] mem_addr;
+    logic [MEM_ADDR_WIDTH-1:0] address;
+    logic [31:0] mem_wdata;
+    logic [31:0] mem_rdata;
+    logic        mem_we;
+    logic        mem_control_enable;
+    logic        cpu_rst_n;
+
+    logic tck;
+    logic tms;
+    logic tdi;
+    logic tdo;
+
+    logic [ADDR_WIDTH-1:0] in_address;
+    assign in_address = 0; // Not used in this testbench, but required for module interface
+    
+
+    logic clk;
+
+	clk_gen clkgen_i(
+		.inclk0(pll_clk),
+		.c0(clk)
+	);
+
+    reg [31:0] memory[0:MEM_SIZE-1] /* verilator public */; 
+
+    // initial begin
+    //     $readmemb("memory_load.bin", memory);
+    // end
+
+    // Instruction memory read logic
+    always_ff @(posedge clk) begin
+        if (mem_we) begin
+            memory[address] <= mem_wdata;
+        end else begin
+            mem_out <= memory[address];
+        end
+    end
+
+    // Instantiate the JTAG-UART bridge
+    jtag_uart_bridge jtag_uart_inst (
+        .clk      (clk),
+        .rst      (~rst_n),
+        .uart_rx  (uart_rx),
+        .uart_tx  (uart_tx),
+        .TCK      (tck),
+        .TMS      (tms),
+        .TDI      (tdi),
+        .TDO      (tdo)
+    );
+
+    // Instantiate the JTAG controller
+    JTAG #(
+        .MEM_ADDR_WIDTH(MEM_ADDR_WIDTH),
+        .MEM_DATA_WIDTH(MEM_DATA_WIDTH)
+    ) jtag (
+        .tck(tck),
+        .tms(tms),
+        .tdi(tdi),
+        .tdo(tdo),
+        .rst_n(rst_n),
+
+        .jtag_addr(jtag_addr),
+        .jtag_wdata(jtag_wdata),
+        .jtag_rdata(jtag_rdata),
+        .jtag_we(jtag_we),
+        .jtag_req_pulse(jtag_req_pulse),
+        .jtag_en(jtag_en),
+        .jtag_ack(jtag_ack)
+    );
+
+        
+    // Instantiate the Programming controller
+    Programming_controller #(
+        .MEM_ADDR_WIDTH(MEM_ADDR_WIDTH),
+        .MEM_DATA_WIDTH(MEM_DATA_WIDTH)
+    )prog_ctrl(
+        .clk(clk),
+        .rst_n(rst_n),
+        .tck(tck),
+        .jtag_en(jtag_en),
+        .jtag_req_pulse(jtag_req_pulse),
+        .jtag_we(jtag_we),
+        .jtag_addr(jtag_addr),
+        .jtag_wdata(jtag_wdata),
+        .mem_addr(mem_addr),
+        .mem_wdata(mem_wdata),
+        .mem_rdata(mem_out),
+        .mem_we(mem_we),
+        .mem_control_enable(mem_control_enable),
+        .jtag_rst_n(cpu_rst_n),
+        .jtag_rdata(jtag_rdata),
+        .jtag_ack(jtag_ack)
+    );
+
+
+
+
+    assign out_data = mem_control_enable ? mem_out : 32'b0;
+
+    assign address = mem_control_enable ?  mem_addr : in_address;
+
+
+    // Seven-segment display logic
+
+    hext07seg seg1 (.hex(memory[0][7:0]  ),.seg(seg_out1));
+    hext07seg seg2 (.hex(memory[0][31:23]),.seg(seg_out2));
+    hext07seg seg3 (.hex(memory[1][7:0]  ),.seg(seg_out3));
+    hext07seg seg4 (.hex(memory[1][31:23]),.seg(seg_out4));
+    hext07seg seg5 (.hex(memory[2][7:0]  ),.seg(seg_out5));
+    hext07seg seg6 (.hex(memory[2][31:23]),.seg(seg_out6));
+
+
+
+endmodule
+
+module hext07seg (
+    input [7:0] logic hex,
+    output reg [5:0] seg
+);
+
+    always_comb begin
+        case (hex)
+            8'h00: seg = 6'b000000; // 0
+            8'h01: seg = 6'b100111; // 1
+            8'h02: seg = 6'b001001; // 2
+            8'h03: seg = 6'b000011; // 3
+            8'h04: seg = 6'b100110; // 4
+            8'h05: seg = 6'b010010; // 5
+            8'h06: seg = 6'b010000; // 6
+            8'h07: seg = 6'b000111; // 7
+            8'h08: seg = 6'b000000; // 8
+            8'h09: seg = 6'b000010; // 9
+            default: seg = 6'b111111; // Blank for invalid input
+        endcase
+    end
+    
+endmodule

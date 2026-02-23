@@ -9,7 +9,7 @@
 module sync_fifo #(
     parameter  WIDTH = 8,
     parameter  DEPTH = 16,
-    localparam  ADDR_BITS = $clog2(DEPTH)
+    parameter  ADDR_BITS = $clog2(DEPTH)
 )(
     input  logic                 clk,
     input  logic                 rst,

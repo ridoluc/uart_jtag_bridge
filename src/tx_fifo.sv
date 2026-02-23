@@ -3,7 +3,7 @@
 
 module tx_fifo #(
     parameter DEPTH = 256,
-    localparam  ADDR_BITS = $clog2(DEPTH)
+    parameter  ADDR_BITS = $clog2(DEPTH)
 )(
     input  logic        clk,
     input  logic        rst,
