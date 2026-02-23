@@ -197,20 +197,48 @@ class JTAGProg:
 
     def read_mem(self, addr: int, expect_response_bytes: int = 6, resp_timeout: float = 1.0) -> bytes:
         # Build read command and send
+        print(f"Requesting read from addr=0x{addr:02X}")
         drv = JTAGDriver()
         drv.build_read_mem(IR_READ, 4, addr, ADDR_W)
         self.send_jtag_driver(drv)
+        # Prepare to shift out read data: send pre-shift control bytes, then
+        # send dummy bytes (0x00) while reading one response byte per dummy
+        # byte, then send the post-shift (exit) control bytes.
 
-        # Prepare to shift out read data and exit
-        drv2 = JTAGDriver()
-        drv2.shift_out_data(DR_W)
-        drv2.shift_out_data_exit()
-        # send the stream produced by shift_out_data / exit (these are control bytes)
-        self.send_jtag_driver(drv2)
+        # pre-shift (enter Shift-DR and any wait cycles)
+        drv_pre = JTAGDriver()
+        drv_pre.shift_out_data(DR_W)
+        pre_stream = drv_pre.get_stream()
+        if pre_stream:
+            self.send_bytes(bytes(pre_stream))
+        else:
+            print("Warning: no pre-shift stream generated")
 
-        # Read response bytes from the UART bridge
-        resp = self.read_bytes(expect_response_bytes, timeout_s=resp_timeout)
-        return resp
+        self.ser.reset_input_buffer()
+        # send dummy bytes one at a time and read one response byte per dummy
+        resp_buf = bytearray()
+        for i in range(expect_response_bytes):
+            # send two dummy bytes (TMS=0,TDI=0 for 4 cycles packed as 0x00)
+            self.send_bytes(bytes([0x00]))
+            b = self.read_bytes(1, timeout_s=resp_timeout)
+            self.send_bytes(bytes([0x00]))
+
+            print(f"Received byte {i}: {b.hex() if b else 'timeout'}")
+            if not b:
+                # timed out, stop early
+                break
+            resp_buf.extend(b)
+
+        # post-shift (exit DR back to Run-Test/Idle)
+        drv_post = JTAGDriver()
+        drv_post.shift_out_data_exit()
+        post_stream = drv_post.get_stream()
+        if post_stream:
+            self.send_bytes(bytes(post_stream))
+        else:
+            print("Warning: no post-shift stream generated")
+
+        return bytes(resp_buf)
 
 
 def load_32bit_hex_file(path: str) -> List[int]:
