@@ -17,6 +17,8 @@ bridge.
 import time
 import serial
 import argparse
+import threading
+import queue
 from typing import List, Optional
 
 
@@ -148,10 +150,46 @@ class JTAGProg:
         self.baud = baud
         self.timeout = timeout
         self.ser = serial.Serial(port, baudrate=baud, timeout=0.01)
+        # threaded reader to avoid missing RX bytes while writing
+        self._rx_q: "queue.Queue[bytes]" = queue.Queue()
+        self._stop_event = threading.Event()
+        self._reader = threading.Thread(target=self._reader_thread, daemon=True)
+        self._reader.start()
 
     def close(self):
         if self.ser and self.ser.is_open:
             self.ser.close()
+        # stop reader thread
+        try:
+            self._stop_event.set()
+            if hasattr(self, "_reader"):
+                self._reader.join(timeout=0.1)
+        except Exception:
+            pass
+
+    def _reader_thread(self):
+        # continuously read single bytes and push them to the queue
+        while not self._stop_event.is_set():
+            try:
+                b = self.ser.read(1)
+                if b:
+                    try:
+                        self._rx_q.put(b, block=False)
+                    except Exception:
+                        pass
+            except Exception:
+                break
+
+    def _clear_rx_queue(self):
+        try:
+            with self._rx_q.mutex:
+                self._rx_q.queue.clear()
+        except Exception:
+            while not self._rx_q.empty():
+                try:
+                    self._rx_q.get_nowait()
+                except Exception:
+                    break
 
     def send_bytes(self, data: bytes):
         # Write and flush
@@ -211,21 +249,26 @@ class JTAGProg:
         pre_stream = drv_pre.get_stream()
         if pre_stream:
             self.send_bytes(bytes(pre_stream))
-        else:
-            print("Warning: no pre-shift stream generated")
 
-        self.ser.reset_input_buffer()
+        # clear any stale data and the reader queue before starting
+        try:
+            self.ser.reset_input_buffer()
+        except Exception:
+            pass
+        self._clear_rx_queue()
+
         # send dummy bytes one at a time and read one response byte per dummy
         resp_buf = bytearray()
         for i in range(expect_response_bytes):
-            # send two dummy bytes (TMS=0,TDI=0 for 4 cycles packed as 0x00)
-            self.send_bytes(bytes([0x00]))
-            b = self.read_bytes(1, timeout_s=resp_timeout)
-            self.send_bytes(bytes([0x00]))
-
-            print(f"Received byte {i}: {b.hex() if b else 'timeout'}")
+            # send one dummy byte (TMS=0,TDI=0 for 4 cycles packed as 0x00)
+            self.send_bytes(b"\x00")
+            # self.send_bytes(b"\x00")
+            try:
+                b = self._rx_q.get(timeout=resp_timeout)
+            except queue.Empty:
+                b = None
             if not b:
-                # timed out, stop early
+                print(f"Received byte {i}: timeout")
                 break
             resp_buf.extend(b)
 
