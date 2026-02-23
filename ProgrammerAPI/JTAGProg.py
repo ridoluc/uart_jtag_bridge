@@ -216,14 +216,25 @@ class JTAGProg:
 
         self.ser.reset_input_buffer()
         # send dummy bytes one at a time and read one response byte per dummy
+
         resp_buf = bytearray()
         for i in range(expect_response_bytes):
             # send two dummy bytes (TMS=0,TDI=0 for 4 cycles packed as 0x00)
-            self.send_bytes(bytes([0x00]))
+            self.ser.reset_input_buffer()
+
+
             b = self.read_bytes(1, timeout_s=resp_timeout)
+
+            # time.sleep(0.01)
             self.send_bytes(bytes([0x00]))
 
-            print(f"Received byte {i}: {b.hex() if b else 'timeout'}")
+
+            self.send_bytes(bytes([0x00]))            
+
+
+            # self.send_bytes(bytes([0x00]))
+
+            # print(f"Received byte {i}: {b.hex() if b else 'timeout'}")
             if not b:
                 # timed out, stop early
                 break
