@@ -251,10 +251,9 @@ class JTAGProg:
             self.send_bytes(bytes(pre_stream))
 
         # clear any stale data and the reader queue before starting
-        try:
-            self.ser.reset_input_buffer()
-        except Exception:
-            pass
+
+
+        self.ser.reset_input_buffer()
         self._clear_rx_queue()
 
         # send dummy bytes one at a time and read one response byte per dummy
@@ -262,7 +261,9 @@ class JTAGProg:
         for i in range(expect_response_bytes):
             # send one dummy byte (TMS=0,TDI=0 for 4 cycles packed as 0x00)
             self.send_bytes(b"\x00")
-            # self.send_bytes(b"\x00")
+            
+
+
             try:
                 b = self._rx_q.get(timeout=resp_timeout)
             except queue.Empty:
@@ -270,6 +271,12 @@ class JTAGProg:
             if not b:
                 print(f"Received byte {i}: timeout")
                 break
+            
+            self.send_bytes(b"\x00")
+
+            self._clear_rx_queue()
+            self.ser.reset_input_buffer()
+
             resp_buf.extend(b)
 
         # post-shift (exit DR back to Run-Test/Idle)
