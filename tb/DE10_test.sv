@@ -74,11 +74,22 @@ module DE10Top #(
         end
     end
 
+    // CDC logic for UART RX signal
+    logic [1:0] uart_rx_sync;
+    always_ff @(posedge clk) begin
+        if(rst_n) begin
+            uart_rx_sync <= 2'b11; // idle state (line is high)
+        end else begin
+            uart_rx_sync <= {uart_rx_sync[0], uart_rx};
+        end
+    end
+
+
     // Instantiate the JTAG-UART bridge
     jtag_uart_bridge jtag_uart_inst (
         .clk      (clk),
         .rst      (~rst_n),
-        .uart_rx  (uart_rx),
+        .uart_rx  (uart_rx_sync[1]),
         .uart_tx  (uart_tx),
         .TCK      (tck),
         .TMS      (tms),

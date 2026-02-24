@@ -216,23 +216,17 @@ class JTAGProg:
 
         self.ser.reset_input_buffer()
         # send dummy bytes one at a time and read one response byte per dummy
+        # time.sleep(0.5)
 
         resp_buf = bytearray()
         for i in range(expect_response_bytes):
             # send two dummy bytes (TMS=0,TDI=0 for 4 cycles packed as 0x00)
-            self.ser.reset_input_buffer()
+            # self.ser.reset_input_buffer()
 
+     
 
             b = self.read_bytes(1, timeout_s=resp_timeout)
 
-            # time.sleep(0.01)
-            self.send_bytes(bytes([0x00]))
-
-
-            self.send_bytes(bytes([0x00]))            
-
-
-            # self.send_bytes(bytes([0x00]))
 
             # print(f"Received byte {i}: {b.hex() if b else 'timeout'}")
             if not b:
@@ -251,6 +245,36 @@ class JTAGProg:
 
         return bytes(resp_buf)
 
+
+    # def read_mem(self, addr: int, expect_response_bytes: int = 6, resp_timeout: float = 1.0) -> bytes:
+    #     # 1. Clear any junk left from previous failed runs
+    #     self.ser.reset_input_buffer()
+        
+    #     # 2. Send Command
+    #     drv = JTAGDriver()
+    #     drv.build_read_mem(IR_READ, 4, addr, ADDR_W)
+    #     self.send_jtag_driver(drv)
+
+    #     # 3. Enter Shift State
+    #     drv_pre = JTAGDriver()
+    #     drv_pre.shift_out_data(DR_W)
+    #     self.send_bytes(bytes(drv_pre.get_stream()))
+
+    #     # 4. Batch request: Send all dummy bytes at once
+    #     # If your protocol requires two 0x00 per 1 byte of response:
+    #     dummy_payload = bytes([0x00] * (expect_response_bytes * 2))
+    #     self.send_bytes(dummy_payload)
+
+    #     # 5. Block until all data is received
+    #     # This is much more robust than a loop
+    #     resp_buf = self.ser.read(expect_response_bytes)
+
+    #     # 6. Exit Shift State
+    #     drv_post = JTAGDriver()
+    #     drv_post.shift_out_data_exit()
+    #     self.send_bytes(bytes(drv_post.get_stream()))
+
+    #     return resp_buf
 
 def load_32bit_hex_file(path: str) -> List[int]:
     out: List[int] = []
@@ -277,7 +301,7 @@ def main():
     parser = argparse.ArgumentParser(description="Host JTAG UART programmer")
     parser.add_argument("port", help="Serial port to open (e.g. /dev/ttyUSB0)")
     parser.add_argument("datafile", help="Text file containing 32-bit hex words, one per line")
-    parser.add_argument("--baud", type=int, default=115200)
+    parser.add_argument("--baud", type=int, default=115200, help="Baud rate for the serial port")
     parser.add_argument("--start-addr", type=int, default=0)
     parser.add_argument("--verify-count", type=int, default=8, help="How many words to read back and print")
     args = parser.parse_args()
