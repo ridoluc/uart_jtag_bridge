@@ -205,6 +205,9 @@ class JTAGProg:
         # send dummy bytes (0x00) while reading one response byte per dummy
         # byte, then send the post-shift (exit) control bytes.
 
+        # time.sleep(0.015)
+
+
         # pre-shift (enter Shift-DR and any wait cycles)
         drv_pre = JTAGDriver()
         drv_pre.shift_out_data(DR_W)
@@ -214,21 +217,26 @@ class JTAGProg:
         else:
             print("Warning: no pre-shift stream generated")
 
+
         self.ser.reset_input_buffer()
         # send dummy bytes one at a time and read one response byte per dummy
-        # time.sleep(0.5)
+        # time.sleep(0.005)
+        # self.ser.reset_input_buffer()
+
 
         resp_buf = bytearray()
         for i in range(expect_response_bytes):
             # send two dummy bytes (TMS=0,TDI=0 for 4 cycles packed as 0x00)
             # self.ser.reset_input_buffer()
 
-     
+          
 
             b = self.read_bytes(1, timeout_s=resp_timeout)
 
+            self.send_bytes(bytes([0x00]))
+            self.send_bytes(bytes([0x00]))  
 
-            # print(f"Received byte {i}: {b.hex() if b else 'timeout'}")
+            print(f"Received byte {i}: {b.hex() if b else 'timeout'}")
             if not b:
                 # timed out, stop early
                 break
@@ -297,6 +305,16 @@ def load_32bit_hex_file(path: str) -> List[int]:
     return out
 
 
+def reconstruct_data_from_response(resp: bytes) -> int:
+    # Reconstruct data as in the C++ testbench (bytes 0..3 are data LSB..MSB)
+    # return value and address separately
+    data_val = 0
+    for j in range(3, -1, -1):
+        data_val <<= 8
+        data_val |= resp[j]
+    addr_val = (resp[5] << 8) | resp[4]
+    return data_val, addr_val
+
 def main():
     parser = argparse.ArgumentParser(description="Host JTAG UART programmer")
     parser.add_argument("port", help="Serial port to open (e.g. /dev/ttyUSB0)")
@@ -316,11 +334,11 @@ def main():
         p.prog_mode_on()
 
         # write words sequentially starting at start-addr
-        for i, w in enumerate(words):
-            addr = args.start_addr + i
-            print(f"Writing addr=0x{addr:02X} data=0x{w:08X}")
-            p.write_mem(addr, w)
-            time.sleep(0.002)
+        # for i, w in enumerate(words):
+        #     addr = args.start_addr + i
+        #     print(f"Writing addr=0x{addr:02X} data=0x{w:08X}")
+        #     p.write_mem(addr, w)
+        #     time.sleep(0.002)
 
         print("Verifying first entries...")
         for i in range(min(args.verify_count, len(words))):
@@ -330,12 +348,27 @@ def main():
                 print(f"Addr 0x{addr:02X}: no response (len={len(resp)})")
                 continue
             # Reconstruct data as in the C++ testbench (bytes 0..3 are data LSB..MSB)
-            data_val = 0
-            for j in range(3, -1, -1):
-                data_val <<= 8
-                data_val |= resp[j]
-            addr_resp = (resp[5] << 8) | resp[4]
+            data_val, addr_resp = reconstruct_data_from_response(resp)
             print(f"Addr read: 0x{addr_resp:04X} Data: 0x{data_val:08X}")
+
+
+        # Read from address 0x02 and print the response
+        # resp = p.read_mem(2, expect_response_bytes=6, resp_timeout=0.5)
+        # resp = p.read_mem(3, expect_response_bytes=6, resp_timeout=0.5)
+        # if len(resp) < 6:
+        #     print(f"Addr 3: no response (len={len(resp)})")
+        # else:
+        #     data_val, addr_resp = reconstruct_data_from_response(resp)
+        #     print(f"Addr read: 0x{addr_resp:04X} Data: 0x{data_val:08X}")
+        # # resp = p.read_mem(0, expect_response_bytes=6, resp_timeout=0.5)
+
+        # resp = p.read_mem(1, expect_response_bytes=6, resp_timeout=0.5)
+        # if len(resp) < 6:
+        #     print(f"Addr 1: no response (len={len(resp)})")
+        # else:
+        #     data_val, addr_resp = reconstruct_data_from_response(resp)
+        #     print(f"Addr read: 0x{addr_resp:04X} Data: 0x{data_val:08X}")
+
 
         print("Exiting programming mode...")
         p.prog_mode_off()
