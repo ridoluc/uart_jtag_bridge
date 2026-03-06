@@ -22,6 +22,12 @@ module DE10Top #(
 
     output logic led,
     output logic mem_ctrl
+	 
+	 // I2C bus
+    // inout  wire  scl,
+    // inout  wire  sda,
+	 
+	// output logic done
 );
 
     localparam MEM_SIZE = 128;
@@ -77,13 +83,21 @@ module DE10Top #(
     // CDC logic for UART RX signal
     logic [1:0] uart_rx_sync;
     always_ff @(posedge clk) begin
-        if(rst_n) begin
+        if(!rst_n) begin
             uart_rx_sync <= 2'b11; // idle state (line is high)
         end else begin
             uart_rx_sync <= {uart_rx_sync[0], uart_rx};
         end
     end
 
+	//  adc_commander adc_commander_inst (
+    //     .i_clk(clk),
+    //     .i_rst_n(rst_n),
+    //     .o_done(done),
+    //     //.o_ack_error(o_ack_error),
+    //     .scl(scl),
+    //     .sda(sda)
+    // );
 
     // Instantiate the JTAG-UART bridge
     jtag_uart_bridge jtag_uart_inst (
@@ -218,4 +232,6 @@ module hexTo7seg (
         endcase
     end
     
+
+	 
 endmodule

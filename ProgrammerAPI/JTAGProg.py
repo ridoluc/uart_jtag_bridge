@@ -334,11 +334,11 @@ def main():
         p.prog_mode_on()
 
         # write words sequentially starting at start-addr
-        # for i, w in enumerate(words):
-        #     addr = args.start_addr + i
-        #     print(f"Writing addr=0x{addr:02X} data=0x{w:08X}")
-        #     p.write_mem(addr, w)
-        #     time.sleep(0.002)
+        for i, w in enumerate(words):
+            addr = args.start_addr + i
+            print(f"Writing addr=0x{addr:02X} data=0x{w:08X}")
+            p.write_mem(addr, w)
+            time.sleep(0.002)
 
         print("Verifying first entries...")
         for i in range(min(args.verify_count, len(words))):
