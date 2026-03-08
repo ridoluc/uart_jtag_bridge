@@ -250,34 +250,16 @@ class JTAGProg:
         if pre_stream:
             self.send_bytes(bytes(pre_stream))
 
-        # clear any stale data and the reader queue before starting
-
-
+        # clear any stale data and the reader queue before starting to read response bytes
+        time.sleep(0.01)
         self.ser.reset_input_buffer()
         self._clear_rx_queue()
 
         # send dummy bytes one at a time and read one response byte per dummy
         resp_buf = bytearray()
-        for i in range(expect_response_bytes):
-            # send one dummy byte (TMS=0,TDI=0 for 4 cycles packed as 0x00)
-            self.send_bytes(b"\x00")
-            
 
-
-            try:
-                b = self._rx_q.get(timeout=resp_timeout)
-            except queue.Empty:
-                b = None
-            if not b:
-                print(f"Received byte {i}: timeout")
-                break
-            
-            self.send_bytes(b"\x00")
-
-            self._clear_rx_queue()
-            self.ser.reset_input_buffer()
-
-            resp_buf.extend(b)
+        # Send two dummy bites for each expected response byte
+        self.send_bytes(b"\x00" * (expect_response_bytes * 2))
 
         # post-shift (exit DR back to Run-Test/Idle)
         drv_post = JTAGDriver()
@@ -287,6 +269,25 @@ class JTAGProg:
             self.send_bytes(bytes(post_stream))
         else:
             print("Warning: no post-shift stream generated")
+
+        # Drain any bytes in the reader queue into resp_buf
+        # (capture all bytes received since last clear)
+        try:
+            # brief pause to allow any in-flight bytes to arrive
+            time.sleep(0.01)
+        except Exception:
+            pass
+
+        # Drain queue without blocking
+        while True:
+            try:
+                b = self._rx_q.get_nowait()
+            except queue.Empty:
+                break
+            resp_buf.extend(b)
+
+        # Print debug info: bytes and count
+        # print(f"Received {len(resp_buf)} bytes: {resp_buf.hex()}")
 
         return bytes(resp_buf)
 
