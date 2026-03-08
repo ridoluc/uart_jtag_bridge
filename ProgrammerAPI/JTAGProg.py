@@ -20,6 +20,7 @@ import argparse
 import threading
 import queue
 from typing import List, Optional
+import random
 
 
 # JTAG constants matching the C++ defines
@@ -312,6 +313,20 @@ def load_32bit_hex_file(path: str) -> List[int]:
             out.append(val)
     return out
 
+## Genearate some dummy data for testing instead of loading from file
+def generate_dummy_data(count: int) -> List[int]:
+    return [random.getrandbits(32) for _ in range(count)]
+
+def reconstruct_data_from_response(resp: bytes) -> int:
+    # Reconstruct data (bytes 0..3 are data LSB..MSB)
+    # return value and address separately
+    data_val = 0
+    for j in range(3, -1, -1):
+        data_val <<= 8
+        data_val |= resp[j]
+    addr_val = (resp[5] << 8) | resp[4]
+    return data_val, addr_val
+
 
 def main():
     parser = argparse.ArgumentParser(description="Host JTAG UART programmer")
@@ -322,7 +337,12 @@ def main():
     parser.add_argument("--verify-count", type=int, default=8, help="How many words to read back and print")
     args = parser.parse_args()
 
-    words = load_32bit_hex_file(args.datafile)
+    # words = load_32bit_hex_file(args.datafile)
+
+    # For testing, generate some dummy data instead of loading from file
+    words = generate_dummy_data(128)
+
+
     p = JTAGProg(args.port, baud=args.baud)
     try:
         print("Resetting JTAG TAP...")
@@ -338,21 +358,39 @@ def main():
             p.write_mem(addr, w)
             time.sleep(0.002)
 
-        print("Verifying first entries...")
-        for i in range(min(args.verify_count, len(words))):
+        # print("Verifying first entries...")
+        # for i in range(min(args.verify_count, len(words))):
+        #     addr = args.start_addr + i
+        #     resp = p.read_mem(addr, expect_response_bytes=6, resp_timeout=0.5)
+        #     if len(resp) < 6:
+        #         print(f"Addr 0x{addr:02X}: no response (len={len(resp)})")
+        #         continue
+        #     # Reconstruct data as in the C++ testbench (bytes 0..3 are data LSB..MSB)
+        #     data_val = 0
+        #     for j in range(3, -1, -1):
+        #         data_val <<= 8
+        #         data_val |= resp[j]
+        #     addr_resp = (resp[5] << 8) | resp[4]
+        #     print(f"Addr read: 0x{addr_resp:04X} Data: 0x{data_val:08X}")
+
+        # Read and veryfy all the written words
+        print("Verifying all entries...")
+        errors = 0
+        for i in range(len(words)):
             addr = args.start_addr + i
             resp = p.read_mem(addr, expect_response_bytes=6, resp_timeout=0.5)
             if len(resp) < 6:
                 print(f"Addr 0x{addr:02X}: no response (len={len(resp)})")
                 continue
-            # Reconstruct data as in the C++ testbench (bytes 0..3 are data LSB..MSB)
-            data_val = 0
-            for j in range(3, -1, -1):
-                data_val <<= 8
-                data_val |= resp[j]
-            addr_resp = (resp[5] << 8) | resp[4]
-            print(f"Addr read: 0x{addr_resp:04X} Data: 0x{data_val:08X}")
+            data_val, addr_resp = reconstruct_data_from_response(resp)
+            expected_val = words[i]
+            if addr_resp != addr or data_val != expected_val:
+                print(f"Addr 0x{addr:02X}: MISMATCH! Expected 0x{expected_val:08X}, got 0x{data_val:08X}")
+                errors += 1
+            else:
+                print(f"Addr 0x{addr:02X}: OK Data: 0x{data_val:08X}")
 
+        print(f"Verification complete. Errors found: {errors}")
         print("Exiting programming mode...")
         p.prog_mode_off()
     finally:
