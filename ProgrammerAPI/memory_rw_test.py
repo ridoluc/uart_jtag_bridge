@@ -20,7 +20,13 @@ import random
 import sys
 from typing import List
 
-from ProgrammerAPI.JTAGProg import JTAGProg, reconstruct_data_from_response, ADDR_W
+try:
+    from ProgrammerAPI import JTAGProg, reconstruct_data_from_response, ADDR_W
+except Exception:
+    # Allow running the script directly from inside the ProgrammerAPI folder
+    # (e.g. when invoked via a UNC/WSL path from Windows). In that case
+    # import the local modules directly.
+    from JTAGProg import JTAGProg, reconstruct_data_from_response, ADDR_W
 
 
 def generate_chunk(seed: int, count: int) -> List[int]:

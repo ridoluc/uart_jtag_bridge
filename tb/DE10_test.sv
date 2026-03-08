@@ -24,7 +24,7 @@ module DE10Top #(
     output logic mem_ctrl
 );
 
-    localparam MEM_SIZE = 128;
+    localparam MEM_SIZE = 1024;
 
     logic [MEM_ADDR_WIDTH-1:0] jtag_addr;
     logic [31:0] jtag_wdata;
@@ -77,7 +77,7 @@ module DE10Top #(
     // CDC logic for UART RX signal
     logic [1:0] uart_rx_sync;
     always_ff @(posedge clk) begin
-        if(rst_n) begin
+        if(!rst_n) begin
             uart_rx_sync <= 2'b11; // idle state (line is high)
         end else begin
             uart_rx_sync <= {uart_rx_sync[0], uart_rx};
