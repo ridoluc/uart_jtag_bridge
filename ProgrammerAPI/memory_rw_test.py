@@ -46,6 +46,7 @@ def parse_args():
     parser.add_argument("--base-seed", type=int, default=0, help="Base seed for deterministic test patterns")
     parser.add_argument("--no-verify", dest="verify", action="store_false", help="Skip read/verify step")
     parser.add_argument("--resp-timeout", type=float, default=0.5, help="Read response timeout per word (s)")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose JTAG driver prints")
     return parser.parse_args()
 
 
@@ -74,7 +75,7 @@ def main():
     print(f"Testing {total_words} words ({human_bytes(total_words*4)}) in {num_chunks} chunk(s) of up to {args.chunk_words} words")
     print(f"Device memory size: {max_mem_words} words (ADDR_W={ADDR_W})")
 
-    p = JTAGProg(args.port, baud=args.baud)
+    p = JTAGProg(args.port, baud=args.baud, verbose=args.verbose)
     try:
         print("Resetting JTAG TAP...")
         p.reset_jtag()
@@ -86,6 +87,18 @@ def main():
         total_read_time = 0.0
         total_errors = 0
         total_written = 0
+        # progress counters
+        written_so_far = 0
+        verified_so_far = 0
+        # throttle updates to a reasonable number (approx 200 updates)
+        write_update_interval = max(1, total_words // 200)
+        read_update_interval = max(1, total_words // 200)
+
+        def _print_progress(stage: str, current: int, total: int, interval: int):
+            pct = (current * 100.0 / total) if total else 100.0
+            # carriage-return update
+            sys.stdout.write(f"\r{stage}: {pct:6.2f}% ({current}/{total})")
+            sys.stdout.flush()
 
         for chunk_id in range(num_chunks):
             remaining = total_words - chunk_id * args.chunk_words
@@ -97,13 +110,21 @@ def main():
             chunk_seed = args.base_seed + chunk_id
             data_chunk = generate_chunk(chunk_seed, this_count)
 
-            # Write chunk
+            # Write chunk (with progress)
             t0 = time.time()
             for i, w in enumerate(data_chunk):
                 addr = (address_offset + i) % max_mem_words
                 p.write_mem(addr, w)
+                written_so_far += 1
+                # throttled progress update
+                if (written_so_far % write_update_interval) == 0 or written_so_far == total_words:
+                    _print_progress("Writing", written_so_far, total_words, write_update_interval)
                 if args.per_write_delay > 0:
                     time.sleep(args.per_write_delay)
+            # end of chunk write
+            # ensure progress line ends
+            sys.stdout.write("\n")
+            
             t1 = time.time()
             write_time = t1 - t0
             total_write_time += write_time
@@ -118,14 +139,25 @@ def main():
                 for i, expected in enumerate(data_chunk):
                     addr = (address_offset + i) % max_mem_words
                     resp = p.read_mem(addr, expect_response_bytes=6, resp_timeout=args.resp_timeout)
+                    print(f"resp: {resp.hex()}")  # debug print
+                    verified_so_far += 1
+                    # throttled progress update
+                    if (verified_so_far % read_update_interval) == 0 or verified_so_far == total_words:
+                        _print_progress("Verifying", verified_so_far, total_words, read_update_interval)
                     if len(resp) < 6:
                         err_chunk += 1
+                        if args.verbose:
+                            print(f"\nChunk {chunk_id+1}, addr {addr:#x}: no response or incomplete response (got {len(resp)} bytes)")
                     else:
                         data_val, addr_resp = reconstruct_data_from_response(resp)
                         if addr_resp != addr or data_val != expected:
                             err_chunk += 1
+                            if args.verbose:
+                                print(f"\nChunk {chunk_id+1}, addr {addr:#x}: verification error! expected {expected:#010x}, got {data_val:#010x} (addr resp {addr_resp:#x})")
                     if args.per_read_delay > 0:
                         time.sleep(args.per_read_delay)
+                # end of chunk verify
+                sys.stdout.write("\n")
                 rt1 = time.time()
                 read_time = rt1 - rt0
                 total_read_time += read_time

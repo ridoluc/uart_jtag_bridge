@@ -146,10 +146,11 @@ class JTAGDriver:
 
 
 class JTAGProg:
-    def __init__(self, port: str, baud: int = 115200, timeout: float = 1.0):
+    def __init__(self, port: str, baud: int = 115200, timeout: float = 1.0, verbose: bool = True):
         self.port = port
         self.baud = baud
         self.timeout = timeout
+        self.verbose = bool(verbose)
         self.ser = serial.Serial(port, baudrate=baud, timeout=0.01)
         # threaded reader to avoid missing RX bytes while writing
         self._rx_q: "queue.Queue[bytes]" = queue.Queue()
@@ -200,7 +201,8 @@ class JTAGProg:
     def send_jtag_driver(self, driver: JTAGDriver):
         stream = driver.get_stream()
         data = bytes(stream)
-        print(f"Sending {len(data)} bytes to {self.port}")
+        if getattr(self, "verbose", True):
+            print(f"Sending {len(data)} bytes to {self.port}")
         self.send_bytes(data)
 
     def read_bytes(self, count: int, timeout_s: float = 1.0) -> bytes:
@@ -236,7 +238,8 @@ class JTAGProg:
 
     def read_mem(self, addr: int, expect_response_bytes: int = 6, resp_timeout: float = 1.0) -> bytes:
         # Build read command and send
-        print(f"Requesting read from addr=0x{addr:02X}")
+        if getattr(self, "verbose", True):
+            print(f"Requesting read from addr=0x{addr:02X}")
         drv = JTAGDriver()
         drv.build_read_mem(IR_READ, 4, addr, ADDR_W)
         self.send_jtag_driver(drv)
@@ -269,7 +272,8 @@ class JTAGProg:
         if post_stream:
             self.send_bytes(bytes(post_stream))
         else:
-            print("Warning: no post-shift stream generated")
+            if getattr(self, "verbose", True):
+                print("Warning: no post-shift stream generated")
 
         # Drain any bytes in the reader queue into resp_buf
         # (capture all bytes received since last clear)
@@ -314,8 +318,9 @@ def load_32bit_hex_file(path: str) -> List[int]:
     return out
 
 ## Genearate some dummy data for testing instead of loading from file
-def generate_dummy_data(count: int) -> List[int]:
-    return [random.getrandbits(32) for _ in range(count)]
+def generate_dummy_data(count: int, seed: int) -> List[int]:
+    r = random.Random(seed)
+    return [r.getrandbits(32) for _ in range(count)]
 
 def reconstruct_data_from_response(resp: bytes) -> int:
     # Reconstruct data (bytes 0..3 are data LSB..MSB)
@@ -340,7 +345,7 @@ def main():
     # words = load_32bit_hex_file(args.datafile)
 
     # For testing, generate some dummy data instead of loading from file
-    words = generate_dummy_data(128)
+    words = generate_dummy_data(32, seed=424)
 
 
     p = JTAGProg(args.port, baud=args.baud)
@@ -356,22 +361,7 @@ def main():
             addr = args.start_addr + i
             print(f"Writing addr=0x{addr:02X} data=0x{w:08X}")
             p.write_mem(addr, w)
-            time.sleep(0.002)
-
-        # print("Verifying first entries...")
-        # for i in range(min(args.verify_count, len(words))):
-        #     addr = args.start_addr + i
-        #     resp = p.read_mem(addr, expect_response_bytes=6, resp_timeout=0.5)
-        #     if len(resp) < 6:
-        #         print(f"Addr 0x{addr:02X}: no response (len={len(resp)})")
-        #         continue
-        #     # Reconstruct data as in the C++ testbench (bytes 0..3 are data LSB..MSB)
-        #     data_val = 0
-        #     for j in range(3, -1, -1):
-        #         data_val <<= 8
-        #         data_val |= resp[j]
-        #     addr_resp = (resp[5] << 8) | resp[4]
-        #     print(f"Addr read: 0x{addr_resp:04X} Data: 0x{data_val:08X}")
+            time.sleep(0.005)
 
         # Read and veryfy all the written words
         print("Verifying all entries...")
