@@ -12,7 +12,7 @@ module sync_fifo #(
     parameter  ADDR_BITS = $clog2(DEPTH)
 )(
     input  logic                 clk,
-    input  logic                 rst,
+    input  logic                 rst_n,
 
     // Write
     input  logic                 wr_en,
@@ -47,8 +47,8 @@ module sync_fifo #(
     // ---------------------------------------------------------
     // Sequential logic
     // ---------------------------------------------------------
-    always_ff @(posedge clk or posedge rst) begin
-        if (rst) begin
+    always_ff @(posedge clk or posedge rst_n) begin
+        if (!rst_n) begin
             wr_ptr <= '0;
             rd_ptr <= '0;
             count  <= '0;

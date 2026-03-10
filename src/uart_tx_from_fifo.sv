@@ -7,7 +7,7 @@
 
 module uart_tx_from_fifo (
     input  logic       clk,
-    input  logic       rst,
+    input  logic       rst_n,
 
     // -------- Reply FIFO interface --------
     input  logic       fifo_empty,
@@ -25,8 +25,8 @@ module uart_tx_from_fifo (
     // ---------------------------------------------------------
     // Control logic
     // ---------------------------------------------------------
-    always_ff @(posedge clk or posedge rst) begin
-        if (rst) begin
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
             fifo_rd_en <= 1'b0;
             tx_valid   <= 1'b0;
         end

@@ -17,7 +17,10 @@ bridge.
 import time
 import serial
 import argparse
+import threading
+import queue
 from typing import List, Optional
+import random
 
 
 # JTAG constants matching the C++ defines
@@ -143,15 +146,52 @@ class JTAGDriver:
 
 
 class JTAGProg:
-    def __init__(self, port: str, baud: int = 115200, timeout: float = 1.0):
+    def __init__(self, port: str, baud: int = 115200, timeout: float = 1.0, verbose: bool = True):
         self.port = port
         self.baud = baud
         self.timeout = timeout
+        self.verbose = bool(verbose)
         self.ser = serial.Serial(port, baudrate=baud, timeout=0.01)
+        # threaded reader to avoid missing RX bytes while writing
+        self._rx_q: "queue.Queue[bytes]" = queue.Queue()
+        self._stop_event = threading.Event()
+        self._reader = threading.Thread(target=self._reader_thread, daemon=True)
+        self._reader.start()
 
     def close(self):
         if self.ser and self.ser.is_open:
             self.ser.close()
+        # stop reader thread
+        try:
+            self._stop_event.set()
+            if hasattr(self, "_reader"):
+                self._reader.join(timeout=0.1)
+        except Exception:
+            pass
+
+    def _reader_thread(self):
+        # continuously read single bytes and push them to the queue
+        while not self._stop_event.is_set():
+            try:
+                b = self.ser.read(1)
+                if b:
+                    try:
+                        self._rx_q.put(b, block=False)
+                    except Exception:
+                        pass
+            except Exception:
+                break
+
+    def _clear_rx_queue(self):
+        try:
+            with self._rx_q.mutex:
+                self._rx_q.queue.clear()
+        except Exception:
+            while not self._rx_q.empty():
+                try:
+                    self._rx_q.get_nowait()
+                except Exception:
+                    break
 
     def send_bytes(self, data: bytes):
         # Write and flush
@@ -161,7 +201,8 @@ class JTAGProg:
     def send_jtag_driver(self, driver: JTAGDriver):
         stream = driver.get_stream()
         data = bytes(stream)
-        print(f"Sending {len(data)} bytes to {self.port}")
+        if getattr(self, "verbose", True):
+            print(f"Sending {len(data)} bytes to {self.port}")
         self.send_bytes(data)
 
     def read_bytes(self, count: int, timeout_s: float = 1.0) -> bytes:
@@ -197,7 +238,8 @@ class JTAGProg:
 
     def read_mem(self, addr: int, expect_response_bytes: int = 6, resp_timeout: float = 1.0) -> bytes:
         # Build read command and send
-        print(f"Requesting read from addr=0x{addr:02X}")
+        if getattr(self, "verbose", True):
+            print(f"Requesting read from addr=0x{addr:02X}")
         drv = JTAGDriver()
         drv.build_read_mem(IR_READ, 4, addr, ADDR_W)
         self.send_jtag_driver(drv)
@@ -214,33 +256,21 @@ class JTAGProg:
         pre_stream = drv_pre.get_stream()
         if pre_stream:
             self.send_bytes(bytes(pre_stream))
-        else:
-            print("Warning: no pre-shift stream generated")
 
-
+        # clear any stale data and the reader queue before starting to read response bytes
+        time.sleep(0.01)
         self.ser.reset_input_buffer()
+        self._clear_rx_queue()
+
         # send dummy bytes one at a time and read one response byte per dummy
         # time.sleep(0.005)
         # self.ser.reset_input_buffer()
 
 
         resp_buf = bytearray()
-        for i in range(expect_response_bytes):
-            # send two dummy bytes (TMS=0,TDI=0 for 4 cycles packed as 0x00)
-            # self.ser.reset_input_buffer()
 
-          
-
-            b = self.read_bytes(1, timeout_s=resp_timeout)
-
-            self.send_bytes(bytes([0x00]))
-            self.send_bytes(bytes([0x00]))  
-
-            print(f"Received byte {i}: {b.hex() if b else 'timeout'}")
-            if not b:
-                # timed out, stop early
-                break
-            resp_buf.extend(b)
+        # Send two dummy bites for each expected response byte
+        self.send_bytes(b"\x00" * (expect_response_bytes * 2))
 
         # post-shift (exit DR back to Run-Test/Idle)
         drv_post = JTAGDriver()
@@ -249,7 +279,27 @@ class JTAGProg:
         if post_stream:
             self.send_bytes(bytes(post_stream))
         else:
-            print("Warning: no post-shift stream generated")
+            if getattr(self, "verbose", True):
+                print("Warning: no post-shift stream generated")
+
+        # Drain any bytes in the reader queue into resp_buf
+        # (capture all bytes received since last clear)
+        try:
+            # brief pause to allow any in-flight bytes to arrive
+            time.sleep(0.01)
+        except Exception:
+            pass
+
+        # Drain queue without blocking
+        while True:
+            try:
+                b = self._rx_q.get_nowait()
+            except queue.Empty:
+                break
+            resp_buf.extend(b)
+
+        # Print debug info: bytes and count
+        # print(f"Received {len(resp_buf)} bytes: {resp_buf.hex()}")
 
         return bytes(resp_buf)
 
@@ -304,9 +354,13 @@ def load_32bit_hex_file(path: str) -> List[int]:
             out.append(val)
     return out
 
+## Genearate some dummy data for testing instead of loading from file
+def generate_dummy_data(count: int, seed: int) -> List[int]:
+    r = random.Random(seed)
+    return [r.getrandbits(32) for _ in range(count)]
 
 def reconstruct_data_from_response(resp: bytes) -> int:
-    # Reconstruct data as in the C++ testbench (bytes 0..3 are data LSB..MSB)
+    # Reconstruct data (bytes 0..3 are data LSB..MSB)
     # return value and address separately
     data_val = 0
     for j in range(3, -1, -1):
@@ -314,6 +368,7 @@ def reconstruct_data_from_response(resp: bytes) -> int:
         data_val |= resp[j]
     addr_val = (resp[5] << 8) | resp[4]
     return data_val, addr_val
+
 
 def main():
     parser = argparse.ArgumentParser(description="Host JTAG UART programmer")
@@ -324,8 +379,13 @@ def main():
     parser.add_argument("--verify-count", type=int, default=8, help="How many words to read back and print")
     args = parser.parse_args()
 
-    words = load_32bit_hex_file(args.datafile)
-    p = JTAGProg(args.port, baud=args.baud)
+    # words = load_32bit_hex_file(args.datafile)
+
+    # For testing, generate some dummy data instead of loading from file
+    words = generate_dummy_data(32, seed=45)
+
+
+    p = JTAGProg(args.port, baud=args.baud, verbose=False)
     try:
         print("Resetting JTAG TAP...")
         p.reset_jtag()
@@ -338,38 +398,26 @@ def main():
             addr = args.start_addr + i
             print(f"Writing addr=0x{addr:02X} data=0x{w:08X}")
             p.write_mem(addr, w)
-            time.sleep(0.002)
+            time.sleep(0.005)
 
-        print("Verifying first entries...")
-        for i in range(min(args.verify_count, len(words))):
+        # Read and veryfy all the written words
+        print("Verifying all entries...")
+        errors = 0
+        for i in range(len(words)):
             addr = args.start_addr + i
             resp = p.read_mem(addr, expect_response_bytes=6, resp_timeout=0.5)
             if len(resp) < 6:
                 print(f"Addr 0x{addr:02X}: no response (len={len(resp)})")
                 continue
-            # Reconstruct data as in the C++ testbench (bytes 0..3 are data LSB..MSB)
             data_val, addr_resp = reconstruct_data_from_response(resp)
-            print(f"Addr read: 0x{addr_resp:04X} Data: 0x{data_val:08X}")
+            expected_val = words[i]
+            if addr_resp != addr or data_val != expected_val:
+                print(f"Addr 0x{addr:02X}: MISMATCH! Expected 0x{expected_val:08X}, got 0x{data_val:08X}")
+                errors += 1
+            else:
+                print(f"Addr 0x{addr:02X}: OK Data: 0x{data_val:08X}")
 
-
-        # Read from address 0x02 and print the response
-        # resp = p.read_mem(2, expect_response_bytes=6, resp_timeout=0.5)
-        # resp = p.read_mem(3, expect_response_bytes=6, resp_timeout=0.5)
-        # if len(resp) < 6:
-        #     print(f"Addr 3: no response (len={len(resp)})")
-        # else:
-        #     data_val, addr_resp = reconstruct_data_from_response(resp)
-        #     print(f"Addr read: 0x{addr_resp:04X} Data: 0x{data_val:08X}")
-        # # resp = p.read_mem(0, expect_response_bytes=6, resp_timeout=0.5)
-
-        # resp = p.read_mem(1, expect_response_bytes=6, resp_timeout=0.5)
-        # if len(resp) < 6:
-        #     print(f"Addr 1: no response (len={len(resp)})")
-        # else:
-        #     data_val, addr_resp = reconstruct_data_from_response(resp)
-        #     print(f"Addr read: 0x{addr_resp:04X} Data: 0x{data_val:08X}")
-
-
+        print(f"Verification complete. Errors found: {errors}")
         print("Exiting programming mode...")
         p.prog_mode_off()
     finally:

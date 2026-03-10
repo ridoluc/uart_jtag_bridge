@@ -1,7 +1,7 @@
 `timescale 1ns/1ps
 module jtag_engine (
     input  logic clk,
-    input  logic rst,
+    input  logic rst_n,
 
     // RX FIFO interface (UART → JTAG)
     input  logic       rx_empty,
@@ -47,8 +47,8 @@ module jtag_engine (
     // ---------------------------------------------------------
     // Sequential logic
     // ---------------------------------------------------------
-    always_ff @(posedge clk or posedge rst) begin
-        if (rst) begin
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
             state        <= IDLE;
             rx_rd_en     <= 1'b0;
             tx_wr_en     <= 1'b0;

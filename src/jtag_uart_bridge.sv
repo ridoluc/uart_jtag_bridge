@@ -5,7 +5,7 @@ module jtag_uart_bridge #(
     parameter int BAUD_RATE = 115200
 )(
     input  logic clk,        // 10 MHz
-    input  logic rst,
+    input  logic rst_n,
 
     // UART pins
     input  logic uart_rx,
@@ -18,8 +18,8 @@ module jtag_uart_bridge #(
     input  logic TDO
 );
 
-    localparam TX_FIFO_DEPTH = 256;
-    localparam RX_FIFO_DEPTH = 256;
+    localparam TX_FIFO_DEPTH = 64;
+    localparam RX_FIFO_DEPTH = 64;
 
     // =========================================================
     // UART RX signals
@@ -62,7 +62,7 @@ module jtag_uart_bridge #(
         .BAUD_RATE(BAUD_RATE)
     ) uart_rx_i (
         .clk      (clk),
-        .rst      (rst),
+        .rst_n      (rst_n),
         .rx       (uart_rx),
         .rx_ready (rx_ready),
         .rx_valid (rx_valid),
@@ -76,7 +76,7 @@ module jtag_uart_bridge #(
         .DEPTH(RX_FIFO_DEPTH)
     ) rx_fifo_i (
         .clk       (clk),
-        .rst       (rst),
+        .rst_n       (rst_n),
         .rx_data   (rx_data),
         .rx_valid  (rx_valid),
         .rx_ready  (rx_ready),
@@ -91,7 +91,7 @@ module jtag_uart_bridge #(
     // =========================================================
     jtag_engine jtag_engine_i (
         .clk            (clk),
-        .rst            (rst),
+        .rst_n            (rst_n),
         // RX FIFO interface (UART → JTAG)
         .rx_empty       (rx_fifo_empty),
         .rx_rd_en       (rx_fifo_rd_en),
@@ -114,7 +114,7 @@ module jtag_uart_bridge #(
         .DEPTH(TX_FIFO_DEPTH)
     ) tx_fifo_i (
         .clk        (clk),
-        .rst        (rst),
+        .rst_n        (rst_n),
         // Write interface
         .wr_en      (tx_fifo_wr_en),
         .wr_data    (tx_fifo_wr_data),
@@ -131,7 +131,7 @@ module jtag_uart_bridge #(
     // =========================================================
     uart_tx_from_fifo tx_sched_i (
         .clk          (clk),
-        .rst          (rst),
+        .rst_n          (rst_n),
 
         .fifo_empty   (tx_fifo_empty),
         .fifo_rd_en   (tx_fifo_rd_en),
@@ -150,7 +150,7 @@ module jtag_uart_bridge #(
         .BAUD_RATE(BAUD_RATE)
     ) uart_tx_i (
         .clk      (clk),
-        .rst      (rst),
+        .rst_n      (rst_n),
 
         .tx_data  (tx_data),
         .tx_valid (tx_valid),

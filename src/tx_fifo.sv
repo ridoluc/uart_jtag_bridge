@@ -6,7 +6,7 @@ module tx_fifo #(
     parameter  ADDR_BITS = $clog2(DEPTH)
 )(
     input  logic        clk,
-    input  logic        rst,
+    input  logic        rst_n,
 
     // Write interface
     input  logic        wr_en,
@@ -26,7 +26,7 @@ module tx_fifo #(
         .DEPTH(DEPTH)
     ) fifo_i (
         .clk(clk),
-        .rst(rst),
+        .rst_n(rst_n),
 
         .wr_en(wr_en),
         .wr_data(wr_data),

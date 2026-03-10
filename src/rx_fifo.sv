@@ -5,7 +5,7 @@ module rx_fifo #(
    parameter  ADDR_BITS = $clog2(DEPTH)
 )(
       input  logic        clk,
-      input  logic        rst,
+      input  logic        rst_n,
    
       // Write interface
       input  logic [7:0]  rx_data,
@@ -22,7 +22,7 @@ module rx_fifo #(
       logic        full;
 
       always_ff @(posedge clk) begin
-         if (rst) begin
+         if (!rst_n) begin
             rx_ready <= 1'b0;
          end
          else begin
@@ -37,7 +37,7 @@ module rx_fifo #(
          .DEPTH(DEPTH)
       ) fifo_i (
          .clk(clk),
-         .rst(rst),
+         .rst_n(rst_n),
 
          .wr_en(rx_valid && rx_ready),
          .wr_data(rx_data),

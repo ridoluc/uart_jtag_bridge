@@ -10,7 +10,7 @@ module uart_tx #(
     parameter BAUD_RATE = 115200
 )(
     input  logic       clk,
-    input  logic       rst,
+    input  logic       rst_n,
 
     // Transmit interface
     input  logic [7:0] tx_data,
@@ -51,8 +51,8 @@ module uart_tx #(
     // ---------------------------------------------------------
     // Baud tick generator
     // ---------------------------------------------------------
-    always_ff @(posedge clk or posedge rst) begin
-        if (rst) begin
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
             baud_cnt  <= '0;
             baud_tick <= 1'b0;
         end else begin
@@ -72,8 +72,8 @@ module uart_tx #(
     // ---------------------------------------------------------
     // UART TX FSM
     // ---------------------------------------------------------
-    always_ff @(posedge clk or posedge rst) begin
-        if (rst) begin
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
             state     <= TX_IDLE;
             tx        <= 1'b1; // idle line is high
             bit_index <= '0;
