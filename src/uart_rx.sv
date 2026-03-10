@@ -6,7 +6,7 @@ module uart_rx #(
     parameter BAUD_RATE = 115200
 )(
     input  logic clk,
-    input  logic rst,
+    input  logic rst_n,
 
     input  logic rx,             // serial input line
     input  logic rx_ready,       // NEW: downstream ready / back-pressure
@@ -41,7 +41,7 @@ module uart_rx #(
     // UART Receive Logic
     // ------------------------------------------------------------
     always_ff @(posedge clk) begin
-        if (rst) begin
+        if (!rst_n) begin
             state     <= IDLE;
             rx_valid  <= 1'b0;
             baud_cnt  <= '0;

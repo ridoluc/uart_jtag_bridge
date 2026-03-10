@@ -88,7 +88,7 @@ module DE10Top #(
     // Instantiate the JTAG-UART bridge
     jtag_uart_bridge jtag_uart_inst (
         .clk      (clk),
-        .rst      (~rst_n),
+        .rst_n    (rst_n),
         .uart_rx  (uart_rx_sync[1]),
         .uart_tx  (uart_tx),
         .TCK      (tck),
@@ -165,7 +165,7 @@ module DE10Top #(
 
     logic [$clog2(CLK_FREQ/2)-1:0] counter;
 
-    always_ff @(posedge clk or negedge rst_n) begin
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
             counter <= 0;
             led <= 0;

@@ -345,10 +345,10 @@ def main():
     # words = load_32bit_hex_file(args.datafile)
 
     # For testing, generate some dummy data instead of loading from file
-    words = generate_dummy_data(32, seed=424)
+    words = generate_dummy_data(32, seed=45)
 
 
-    p = JTAGProg(args.port, baud=args.baud)
+    p = JTAGProg(args.port, baud=args.baud, verbose=False)
     try:
         print("Resetting JTAG TAP...")
         p.reset_jtag()

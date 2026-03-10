@@ -139,7 +139,7 @@ def main():
                 for i, expected in enumerate(data_chunk):
                     addr = (address_offset + i) % max_mem_words
                     resp = p.read_mem(addr, expect_response_bytes=6, resp_timeout=args.resp_timeout)
-                    print(f"resp: {resp.hex()}")  # debug print
+                    # print(f"resp: {resp.hex()}")  # debug print
                     verified_so_far += 1
                     # throttled progress update
                     if (verified_so_far % read_update_interval) == 0 or verified_so_far == total_words:
@@ -185,10 +185,7 @@ def main():
             print("All data verified successfully.")
 
     finally:
-        try:
-            p.prog_mode_off()
-        except Exception:
-            pass
+
         p.close()
 
 
